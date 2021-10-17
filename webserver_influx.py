@@ -5,6 +5,8 @@ from multiprocessing import Process, Queue
 from influxdb import InfluxDBClient
 from datetime import datetime
 import time
+import cgi
+import json
 
 
 def start_server(q, serverHost, serverPort):
@@ -20,8 +22,11 @@ def start_server(q, serverHost, serverPort):
                 result = q.get()
                 result += 1
                 q.put(result)
-
+            
             self.send_response(200)
+            # self.send_header("Content-type", "text/csv")
+            self.end_headers()
+            
             query_values_sum = 0
             try:
                 url = urlparse(self.path)
@@ -35,13 +40,53 @@ def start_server(q, serverHost, serverPort):
 
                     except:
                         print(f'Unexpected value: {val[0]}\n')
-                    
-                self.send_header("Content-type", "text/csv")
-                self.end_headers()
+                
                 self.wfile.write(bytes(f'Sum: {query_values_sum}', "utf-8"))
 
             except:
                 print(f'Unparsed URL structure!\n')
+        
+        def do_POST(self):
+            
+            if q.empty() == True:
+                result = 1
+                q.put(result)
+            else:
+                result = q.get()
+                result += 1
+                q.put(result)
+
+            ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
+            if ctype == 'application/json':
+                self.send_response(200)
+                self.end_headers()
+
+                content_length = int(self.headers['Content-Length'])
+                body = self.rfile.read(content_length)
+                body_decoded = body.decode('utf-8')
+                try:
+                    body_dict = json.loads(body_decoded)
+                    query_values = body_dict.values()
+
+                    query_values_sum = 0
+                    for val in query_values:
+                        try:
+                            numeric_val = float(val)
+                            query_values_sum += numeric_val
+
+                        except:
+                            print(f'Unexpected value: {val[0]}\n')
+                    
+
+                    self.wfile.write(bytes(f'Sum: {query_values_sum}', "utf-8"))
+                
+                except:
+                    print(f'Unexpected format of the body recieved: {body_decoded}\n body info type: {type(body_decoded)}' )
+            
+            else:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(bytes(f'Please, ensure the content type of your request is "application/json".', "utf-8"))
 
         # print(self.headers)
         # print(f'Sum: {query_values_sum}')
@@ -81,17 +126,17 @@ def report_to_influxdb(q, dbHost, dbPort):
             report = [{
                 "measurement": "requests",
                 "tags": {
-                    "request": "GET_per_1_minute" 
+                    "request": "GETs_per_minute" 
                     },
                 "time": datetime.now(),
                 "fields": {
-                    'requests_number': requests_to_report,
+                    "requests_number": requests_to_report,
                 }
             }]
             
             try:
                 client.write_points(report)
-                print(f'Report sent: Requests per time period: {requests_to_report}, requests from the start: {requests_total}')
+                print(f'Report sent: Requests per minute: {requests_to_report}, requests from the server start: {requests_total}')
                 requests_reported = requests_reported + requests_to_report
             except:
                 print(f'Report was NOT sent at: {datetime.now()}')
