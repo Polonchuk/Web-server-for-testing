@@ -13,7 +13,7 @@ def start_server(q, serverHost, serverPort):
     
     class MathServer(BaseHTTPRequestHandler):
         
-        def do_GET(self):
+        def requests_number_increment(self):
 
             if q.empty() == True:
                 result = 1
@@ -22,9 +22,12 @@ def start_server(q, serverHost, serverPort):
                 result = q.get()
                 result += 1
                 q.put(result)
+
+        def do_GET(self):
+
+            self.requests_number_increment()
             
             self.send_response(200)
-            # self.send_header("Content-type", "text/csv")
             self.end_headers()
             
             query_values_sum = 0
@@ -48,13 +51,7 @@ def start_server(q, serverHost, serverPort):
         
         def do_POST(self):
             
-            if q.empty() == True:
-                result = 1
-                q.put(result)
-            else:
-                result = q.get()
-                result += 1
-                q.put(result)
+            self.requests_number_increment()
 
             ctype, pdict = cgi.parse_header(self.headers.get('content-type'))
             if ctype == 'application/json':
@@ -75,9 +72,8 @@ def start_server(q, serverHost, serverPort):
                             query_values_sum += numeric_val
 
                         except:
-                            print(f'Unexpected value: {val[0]}\n')
+                            print(f'Unexpected value: {val}\n')
                     
-
                     self.wfile.write(bytes(f'Sum: {query_values_sum}', "utf-8"))
                 
                 except:
@@ -88,8 +84,6 @@ def start_server(q, serverHost, serverPort):
                 self.end_headers()
                 self.wfile.write(bytes(f'Please, ensure the content type of your request is "application/json".', "utf-8"))
 
-        # print(self.headers)
-        # print(f'Sum: {query_values_sum}')
 
     httpd = HTTPServer((serverHost, serverPort), MathServer)
     print(f'Math server listening on http://{serverHost}:{serverPort}\n')
